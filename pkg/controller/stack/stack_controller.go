@@ -173,6 +173,11 @@ func (r *ReconcileStack) Reconcile(request reconcile.Request) (reconcile.Result,
 	// Delete the working directory after the reconciliation is completed (regardless of success or failure).
 	defer sess.CleanupPulumiWorkdir()
 
+	if sess.lastCommit == currentCommit {
+		return reconcile.Result{}, nil
+	}
+	sess.lastCommit = currentCommit
+
 	// Step 2. If there are extra environment variables, read them in now and use them for subsequent commands.
 	if err = sess.SetEnvs(stack.Envs, request.Namespace); err != nil {
 		reqLogger.Error(err, "Could not find ConfigMap for Envs")
@@ -295,7 +300,8 @@ func (r *ReconcileStack) Reconcile(request reconcile.Request) (reconcile.Result,
 	}
 	reqLogger.Info("Successfully updated status for Stack", "Stack.Name", stack.Stack)
 
-	return reconcile.Result{}, nil
+	// Reconcile every 60 seconds to support git branch tracking.
+	return reconcile.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
 func (sess *reconcileStackSession) finalize(stack *pulumiv1alpha1.Stack) error {
@@ -363,6 +369,7 @@ type reconcileStackSession struct {
 	autoStack  *auto.Stack
 	namespace  string
 	workdir    string
+	lastCommit string
 }
 
 // blank assignment to verify that reconcileStackSession implements pulumiv1alpha1.StackController.
